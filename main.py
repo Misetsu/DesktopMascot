@@ -2,6 +2,7 @@
 import os
 import sys
 import winsound
+import threading
 
 from PyQt5.QtWidgets import *
 from PyQt5.QtGui import *
@@ -99,24 +100,16 @@ class Window(QMainWindow):
         current_time = QTime.currentTime()
         current_time = current_time.toString("hh:mm:ss")
         if current_time in alarm.on_time:
-            cwd = os.getcwd()
-            p = cwd + "/Alarm03.wav"
-            winsound.PlaySound(p, winsound.SND_ASYNC + winsound.SND_LOOP)
             self.alarmMessage()
 
-    # アラームのメッセージを表示
+    # ラームのメッセージを表示
     def alarmMessage(self):
         self.msg = QMessageBox()
         self.msg.setIcon(QMessageBox.Information)
         self.msg.setWindowTitle("アラーム")
         self.msg.setText("時間だよ～起きろ！動け！")
         self.msg.setStandardButtons(QMessageBox.Ok)
-        self.msg.buttonClicked.connect(self.offSound)
         self.msg.show()
-
-    # 音を消す
-    def offSound(self):
-        winsound.PlaySound(None, winsound.SND_ASYNC)
 
 
 if __name__ == '__main__':
