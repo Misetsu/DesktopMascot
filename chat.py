@@ -4,8 +4,8 @@ from PyQt5.QtCore import Qt
 from datetime import datetime
 from clock import Clock
 from memo import MemoWindow
+from nlp import NlpProcess
 import alarm
-
 
 text = "" #入力
 
@@ -24,6 +24,7 @@ class ChatWindow(QWidget):
         self.time_window = Clock()
         self.memo_window = MemoWindow()
         self.alarm_window = alarm.AlarmWindow()
+        self.nlp = NlpProcess()
         # コマンドラインを定義
         self.COMMAND = {
             "/time": self.handle_time,
@@ -79,7 +80,9 @@ class ChatWindow(QWidget):
             if command in self.COMMAND:
                 self.COMMAND[command]()
             else:
-                self.history.append(command + " というコマンドなんてないよ\n/help で一覧見な\n")
+                response = self.get_action()
+                self.history.setText(self.history.toPlainText()
+                                     + response + "\n")
         # AIチャットの場合
         else:
             response = self.get_ai()
@@ -128,3 +131,26 @@ class ChatWindow(QWidget):
     def get_ai(self):
         response = "AIまだないよ\nコマンド打ってな"
         return response
+
+    def get_key(self):
+        global text
+        command = text[1:]
+        action, time, keywords = self.nlp.getKeyword(command)
+        return action, time, keywords
+
+    def get_action(self):
+        action, time_list, keyword_list = self.get_key()
+        key_str = "なんかエラー起こったかも…"
+        if action == 0:
+            key_str = "ヒットするキーワードがないな、他試してみ。"
+        elif action == 1:
+            pass
+        elif action == 2:
+            pass
+        elif action == 3:
+            pass
+        elif action == 4:
+            pass
+        else:
+            key_str = "なんかエラー起こったかも…"
+        return key_str
