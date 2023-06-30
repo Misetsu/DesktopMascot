@@ -1,13 +1,11 @@
 #ライブラリ
-import os
+import sqlite3
 from PyQt5.QtWidgets import *
 from PyQt5.QtCore import QLocale, QDate, Qt, QTimer, QTime
 from PyQt5.QtGui import QFont
 
 date_index = QDate.currentDate()
 date_index = date_index.toString("yyyyMMdd")
-alarm_list = []
-on_alarm = []
 on_time = []
 
 class AlarmWindow(QWidget):
@@ -53,7 +51,7 @@ class AlarmWindow(QWidget):
     def closeEvent(self, e):
         self.saveDiary()
         self.saveTask()
-        self.saveAlarm()
+        # self.saveAlarm()
         self.close()
 
     # 画面1UI
@@ -103,115 +101,86 @@ class AlarmWindow(QWidget):
     # 日記を取得
     def getDiary(self):
         global date_index
-        # ファイルの場所を取得
         d = date_index
-        cwd = os.getcwd()
-        cwd = cwd + "/calendar"
-        p = cwd + "/diary" + d + ".txt"
-        # ファイルを新しく作る、エラーは無視、最後にファイルを読み込む
-        try:
-            open(p, "x", encoding="utf-8")
-        except:
-            pass
-        finally:
-            # Read & write
-            with open(p, "r+", encoding="utf-8") as file:
-                data = file.read()
-            self.diary.setPlainText(data)
+        conn = sqlite3.connect("data.db")
+        cursor = conn.cursor()
+        query = "SELECT content FROM diary WHERE diaryDate = ?;"
+        results = cursor.execute(query, (d,)).fetchone()
+        if results is None:
+            query = "INSERT INTO diary (diaryDate, content) VALUES (?,?);"
+            row = (d, "", )
+            cursor.execute(query, row)
+            conn.commit()
+            self.diary.setPlainText("")
+        else:
+            for result in results:
+                self.diary.setPlainText(result)
 
     # 日記保存
     def saveDiary(self):
         global date_index
         # ファイルの場所を取得
         d = date_index
-        cwd = os.getcwd()
-        cwd = cwd + "/calendar"
-        p = cwd + "/diary" + d + ".txt"
-        # Overwrite
-        with open(p, "w", encoding="utf-8") as file:
-            file.write(self.diary.toPlainText())
+        conn = sqlite3.connect("data.db")
+        cursor = conn.cursor()
+        query = "UPDATE diary SET content = ? WHERE diaryDate = ?;"
+        row = (self.diary.toPlainText(), d,)
+        cursor.execute(query, row)
+        conn.commit()
 
     # タスクを取得
     def getTask(self):
         global date_index
         self.task.clear()
-        # ファイルの場所を取得
         d = date_index
-        cwd = os.getcwd()
-        cwd = cwd + "/calendar"
-        p = cwd + "/task" + d + ".txt"
-        # ファイルを新しく作る、エラーは無視、最後にファイルを読み込む
-        try:
-            open(p, "x", encoding="utf-8")
-        except:
+        conn = sqlite3.connect("data.db")
+        cursor = conn.cursor()
+        query = "SELECT taskName, switch FROM task WHERE taskDate = ?;"
+        results = cursor.execute(query, (d,)).fetchall()
+        if results is None:
             pass
-        finally:
-            with open(p, "r+", encoding="utf-8") as file:
-                lines = [line.rstrip() for line in file]
-            for line in lines:
-                flg, name = line.split("&_sep_&")
-                item = QListWidgetItem(name)
+        else:
+            for result in results:
+                item = QListWidgetItem(result[0])
                 item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
-                if flg == "1":
+                if result[1] == 1:
                     item.setCheckState(Qt.Checked)
-                elif flg == "0":
+                elif result[1] == 0:
                     item.setCheckState(Qt.Unchecked)
                 self.task.addItem(item)
 
     # タスクを追加
     def addTask(self):
         global date_index
-        # ファイルの場所を取得
         d = date_index
-        cwd = os.getcwd()
-        cwd = cwd + "/calendar"
-        p = cwd + "/task" + d + ".txt"
-        text = self.input.text()
-        # 最後に追加
-        with open(p, "a", encoding="utf-8") as file:
-            file.write("0&_sep_&" + text + "\n")
+        conn = sqlite3.connect("data.db")
+        cursor = conn.cursor()
+        query = "INSERT INTO task (taskDate, taskName, switch) VALUES (?,?,?);"
+        row = (d, self.input.text(), 0,)
+        cursor.execute(query, row)
+        conn.commit()
         self.input.setText("")
         self.getTask()
 
     # タスクを保存
     def saveTask(self):
         global date_index
-        all_task = ""
-        # アイテムごとにチェック
+        d = date_index
+        conn = sqlite3.connect("data.db")
+        cursor = conn.cursor()
         for i in range(self.task.count()):
             item = self.task.item(i)
             if item.checkState() == Qt.Checked:
-                all_task = all_task + "1&_sep_&" + item.text() + "\n"
+                row = (1, d, item.text(),)
             elif item.checkState() == Qt.Unchecked:
-                all_task = all_task + "0&_sep_&" + item.text() + "\n"
-        # ファイルの場所を取得
-        d = date_index
-        cwd = os.getcwd()
-        cwd = cwd + "/calendar"
-        p = cwd + "/task" + d + ".txt"
-        # Overwrite
-        with open(p, "w", encoding="utf-8") as file:
-            file.write(all_task)
+                row = (0, d, item.text(),)
+            query = "UPDATE task SET switch = ? WHERE taskDate = ? AND taskName = ?;"
+            cursor.execute(query, row)
+        conn.commit()
         self.getTask()
 
     # 画面2UI
     def stack2UI(self):
-        global alarm_list, on_alarm, on_time
-        alarm_list = []
-        on_alarm = []
-        cwd = os.getcwd()
-        cwd = cwd + "/calendar"
-        p = cwd + "/alarm.txt"
-        # 保存しているアラームを取得
-        try:
-            with open(p, "r+", encoding="utf-8") as file:
-                lines = [line.rstrip() for line in file]
-            alarm_list = lines[0].split(" ")
-            on_alarm = lines[1].split(" ")
-            on_time = lines[2].split(" ")
-        finally:
-            pass
-
         self.time = QLabel()
         self.time.setFont(QFont('Arial', 30))
         self.time.setAlignment(Qt.AlignCenter)
@@ -260,30 +229,39 @@ class AlarmWindow(QWidget):
 
     # アラームを表示
     def getAlarmList(self):
-        global alarm_list, on_alarm
-        # ループでlist itemを作る
-        for i in range(len(alarm_list)):
-            self.item = QListWidgetItem()
-            self.item_widget = QWidget()
-            self.line_text = QLabel(alarm_list[i])
-            self.line_push_button = QPushButton("オフ")
-            self.line_push_button.setObjectName("switch " + str(i))
-            self.line_push_button.setCheckable(True)
-            if alarm_list[i] in on_alarm:
-                self.line_push_button.setChecked(True)
-                self.line_push_button.setText("オン")
-            self.line_push_button.clicked.connect(self.clicked)
-            self.delete_button = QPushButton("削除")
-            self.delete_button.setObjectName("del " + str(i))
-            self.delete_button.clicked.connect(self.delAlarm)
-            self.item_layout = QHBoxLayout()
-            self.item_layout.addWidget(self.line_text)
-            self.item_layout.addWidget(self.line_push_button)
-            self.item_layout.addWidget(self.delete_button)
-            self.item_widget.setLayout(self.item_layout)
-            self.item.setSizeHint(self.item_widget.sizeHint())
-            self.ListWidget.addItem(self.item)
-            self.ListWidget.setItemWidget(self.item, self.item_widget)
+        self.ListWidget.clear()
+        conn = sqlite3.connect("data.db")
+        cursor = conn.cursor()
+        query = "SELECT * FROM alarm;"
+        results = cursor.execute(query).fetchall()
+        if results is None:
+            pass
+        else:
+            # ループでlist itemを作る
+            for result in results:
+                self.item = QListWidgetItem()
+                self.item_widget = QWidget()
+                self.line_text = QLabel(result[1])
+                self.line_push_button = QPushButton()
+                self.line_push_button.setObjectName("switch " + str(result[0]))
+                self.line_push_button.setCheckable(True)
+                if result[3] == 1:
+                    self.line_push_button.setChecked(True)
+                    self.line_push_button.setText("オン")
+                elif result[3] == 0:
+                    self.line_push_button.setText("オフ")
+                self.line_push_button.clicked.connect(self.clicked)
+                self.delete_button = QPushButton("削除")
+                self.delete_button.setObjectName("del " + str(result[0]))
+                self.delete_button.clicked.connect(self.delAlarm)
+                self.item_layout = QHBoxLayout()
+                self.item_layout.addWidget(self.line_text)
+                self.item_layout.addWidget(self.line_push_button)
+                self.item_layout.addWidget(self.delete_button)
+                self.item_widget.setLayout(self.item_layout)
+                self.item.setSizeHint(self.item_widget.sizeHint())
+                self.ListWidget.addItem(self.item)
+                self.ListWidget.setItemWidget(self.item, self.item_widget)
 
     # アラームをオンオフ
     def clicked(self):
@@ -300,65 +278,54 @@ class AlarmWindow(QWidget):
 
     # アラームをオンにする
     def alarmOn(self, i):
-        global alarm_list, on_alarm, on_time
-        time_str = str(alarm_list[i])
-        on_alarm.append(time_str)
-        time_str = time_str + ":00"
-        on_time.append(time_str)
+        conn = sqlite3.connect("data.db")
+        cursor = conn.cursor()
+        query = "UPDATE alarm SET switch = 1 WHERE alarmId = ?;"
+        cursor.execute(query, (i, ))
+        conn.commit()
+        self.getOnAlarm()
 
     # アラームをオフにする
     def alarmOff(self, i):
-        global alarm_list,on_alarm, on_time
-        time_str = alarm_list[i]
-        try:
-            on_alarm.remove(time_str)
-        except:
-            pass
-        time_str = str(time_str) + ":00"
-        try:
-            on_time.remove(time_str)
-        except:
-            pass
+        conn = sqlite3.connect("data.db")
+        cursor = conn.cursor()
+        query = "UPDATE alarm SET switch = 0 WHERE alarmId = ?;"
+        cursor.execute(query, (i,))
+        conn.commit()
+        self.getOnAlarm()
 
     # アラームを追加
     def addAlarm(self):
-        global alarm_list
         t = self.time_edit.time().toString()
-        t = t[:-3]
-        alarm_list.append(t)
-        self.ListWidget.clear()
+        row = (t[:-3], t[:-3] + ":00", 0,)
+        conn = sqlite3.connect("data.db")
+        cursor = conn.cursor()
+        query = "INSERT INTO alarm (alarmName, time, switch) VALUES (?,?,?);"
+        cursor.execute(query, row)
+        conn.commit()
         self.getAlarmList()
 
     # アラームを削除
     def delAlarm(self):
-        global alarm_list
         sender = self.sender()
         push_button = self.findChild(QPushButton, sender.objectName())
         t, i = push_button.objectName().split(" ")
         i = int(i)
         self.alarmOff(i)
-        alarm_list.pop(i)
-        self.ListWidget.clear()
+        conn = sqlite3.connect("data.db")
+        cursor = conn.cursor()
+        query = "DELETE FROM alarm WHERE alarmId = ?;"
+        cursor.execute(query, (i, ))
+        conn.commit()
         self.getAlarmList()
 
-    # アラームを保存
-    def saveAlarm(self):
-        global alarm_list, on_alarm, on_time
-        data = ""
-        for i in alarm_list:
-            data = data + i + " "
-        data = data + "\n"
-        for i in on_alarm:
-            data = data + i + " "
-        data = data + "\n"
-        for i in on_time:
-            data = data + i + " "
-        data = data + "\n"
-        cwd = os.getcwd()
-        cwd = cwd + "/calendar"
-        p = cwd + "/alarm.txt"
-        try:
-            with open(p, "w", encoding="utf-8") as file:
-                file.write(data)
-        finally:
-            pass
+    # オンにしたアラームを取得
+    def getOnAlarm(self):
+        global on_time
+        on_time.clear()
+        conn = sqlite3.connect("data.db")
+        cursor = conn.cursor()
+        query = "SELECT time FROM alarm WHERE switch = 1;"
+        results = cursor.execute(query).fetchall()
+        for result in results:
+            on_time.append(result[0])

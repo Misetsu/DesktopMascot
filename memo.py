@@ -144,7 +144,6 @@ class MemoWindow(QWidget):
     # メモを削除
     def deleteMemo(self):
         global memo_index
-        print(memo_index)
         conn = sqlite3.connect("data.db")
         cursor = conn.cursor()
         query = "SELECT memoId FROM memo LIMIT 1 OFFSET ?;"
