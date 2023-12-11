@@ -1,7 +1,6 @@
 # ライブラリ
-import os
+import sqlite3
 from PyQt5.QtWidgets import *
-from datetime import datetime
 
 memo_index = 0
 
@@ -23,17 +22,16 @@ class MemoWindow(QWidget):
         self.memolist.setCurrentRow(0)
 
         self.memopad = QTextEdit()
-        try:
-            cwd = os.getcwd()
-            cwd = cwd + "/memo"
-            l = [f for f in os.listdir(cwd) if f.endswith("memo.txt")]
-            p = cwd + "/" + l[0]
-            # Read & write
-            with open(p, "r+", encoding="utf-8") as file:
-                data = file.read()
-            self.memopad.setPlainText(data)
-        except:
-            self.memopad.setPlainText("メモがないよ\nAddボタンでメモを追加してね")
+
+        conn = sqlite3.connect("data.db")
+        cursor = conn.cursor()
+        query = "SELECT content FROM memo;"
+        results = cursor.execute(query).fetchone()
+        if results is None:
+            self.memopad.setPlainText("メモがないよ\n追加ボタンでメモを追加してね")
+        else:
+            for result in results:
+                self.memopad.setPlainText(result)
 
         self.add = QPushButton("追加")
         self.add.clicked.connect(self.addMemo)
@@ -49,6 +47,7 @@ class MemoWindow(QWidget):
 
         self.changeMemo()
 
+
     # ウィンド閉じる時の動作
     def closeEvent(self, e):
         self.saveMemo()
@@ -58,106 +57,121 @@ class MemoWindow(QWidget):
     # メモの目次を取得
     def getSummary(self):
         global memo_index
-        # ファイルの場所を取得
         summary = []
-        cwd = os.getcwd()
-        cwd = cwd + "/memo"
-        l = [f for f in os.listdir(cwd) if f.endswith("memo.txt")]
-        for i in l:
-            p = cwd + "/" + i
-            # Read only
-            with open(p, "r", encoding="utf-8") as file:
-                first_line = file.readline().strip('\n') # 1行目
-            summary.append(first_line)
-        # 更新
-        self.memolist.clear()
-        self.memolist.addItems(summary)
-        self.memolist.setCurrentRow(memo_index)
+
+        conn = sqlite3.connect("data.db")
+        cursor = conn.cursor()
+        query = "SELECT memoName FROM memo;"
+        results = cursor.execute(query).fetchall()
+        if results is None:
+            self.memolist.clear()
+        else:
+            for result in results:
+                summary.append(str(result[0]))
+            self.memolist.clear()
+            self.memolist.addItems(summary)
+            self.memolist.setCurrentRow(memo_index)
 
     # 表示するメモをかえる
     def changeMemo(self):
         global memo_index
         self.saveMemo()
-        try:
-            # ファイルの場所を取得
-            i = int(self.memolist.currentRow())
-            memo_index = i
-            cwd = os.getcwd()
-            cwd = cwd + "/memo"
-            l = [f for f in os.listdir(cwd) if f.endswith("memo.txt")]
-            p = cwd + "/" + l[i]
-            # Read & write
-            with open(p, "r+", encoding="utf-8") as file:
-                data = file.read()
-            self.memopad.setPlainText(data)
-            self.getSummary()
-        except:
+        i = int(self.memolist.currentRow())
+        memo_index = i
+        conn = sqlite3.connect("data.db")
+        cursor = conn.cursor()
+        query = "SELECT memoId FROM memo LIMIT 1 OFFSET ?;"
+        results = cursor.execute(query, (memo_index,)).fetchone()
+        if results is None:
             pass
+        else:
+            for result in results:
+                id = result
+            query = "SELECT content FROM memo WHERE memoId = ?;"
+            results = cursor.execute(query, (id,)).fetchall()
+            if results is None:
+                pass
+            else:
+                for result in results:
+                    self.memopad.setPlainText(str(result[0]))
+                    self.getSummary()
 
     # メモを追加
     def addMemo(self):
         global memo_index
         self.saveMemo()
-        # ファイルの場所を取得
-        t = datetime.now()
-        ct = t.strftime("%Y%m%d%H%M%S")
-        name = ct + "memo.txt"
-        cwd = os.getcwd()
-        cwd = cwd + "/memo"
-        p = cwd + "/" + name
-        try:
-            open(p, "x", encoding="utf-8")
-            l = [f for f in os.listdir(cwd) if f.endswith("memo.txt")]
-            for i in range(len(l)):
-                if l[i].endswith(name):
-                    break
-            self.memolist.setCurrentRow(i)
-            memo_index = i
-            self.memopad.setPlainText("")
-            self.changeMemo()
-        except:
-            pass
+
+        name = ""
+        text = ""
+        row = (name, text,)
+        conn = sqlite3.connect("data.db")
+        cursor = conn.cursor()
+        query = "INSERT INTO memo (memoName, content) VALUES (?,?);"
+        cursor.execute(query, row)
+        conn.commit()
+        self.getSummary()
+        query = "SELECT COUNT(*) FROM memo;"
+        i = cursor.execute(query).fetchone()
+        i = i[0] - 1
+        self.memolist.setCurrentRow(i)
+        memo_index = i
+        self.memopad.setPlainText("")
+        self.changeMemo()
 
     # メモを保存　自動保存
     def saveMemo(self):
         global memo_index
         try:
-            # ファイルの場所を取得
-            i = int(self.memolist.currentRow())
-            cwd = os.getcwd()
-            cwd = cwd + "/memo"
-            l = [f for f in os.listdir(cwd) if f.endswith("memo.txt")]
-            p = cwd + "/" + l[memo_index]
-            # Overwrite
-            with open(p, "w", encoding="utf-8") as file:
-                file.write(self.memopad.toPlainText())
+            text = self.memopad.toPlainText()
+            name = self.memopad.toPlainText().split("\n")
+            name = name[0]
+            conn = sqlite3.connect("data.db")
+            cursor = conn.cursor()
+            query = "SELECT memoId FROM memo LIMIT 1 OFFSET ?;"
+            results = cursor.execute(query, (memo_index,)).fetchone()
+            if results is None:
+                pass
+            else:
+                for result in results:
+                    id = result
+                row = (name, text, id,)
+                query = "UPDATE memo SET memoName = ?, content = ? WHERE memoId = ?;"
+                cursor.execute(query, row)
+                conn.commit()
         except:
             pass
 
     # メモを削除
     def deleteMemo(self):
         global memo_index
-        # ファイルの場所を取得
-        i = int(self.memolist.currentRow())
-        cwd = os.getcwd()
-        cwd = cwd + "/memo"
-        l = [f for f in os.listdir(cwd) if f.endswith("memo.txt")]
-        p = cwd + "/" + l[i]
-        # ファイルがあるかチェック
-        if os.path.exists(p):
-            os.remove(p)
-        # 更新
-        try:
-            memo_index = 0
-            cwd = os.getcwd()
-            cwd = cwd + "/memo"
-            l = [f for f in os.listdir(cwd) if f.endswith("memo.txt")]
-            p = cwd + "/" + l[0]
-            # Read & write
-            with open(p, "r+", encoding="utf-8") as file:
-                data = file.read()
-            self.memopad.setPlainText(data)
+        conn = sqlite3.connect("data.db")
+        cursor = conn.cursor()
+        query = "SELECT memoId FROM memo LIMIT 1 OFFSET ?;"
+        results = cursor.execute(query, (memo_index,)).fetchone()
+        if results is None:
+            pass
+        else:
+            for result in results:
+                id = result
+            query = "DELETE FROM memo WHERE memoId = ?;"
+            cursor.execute(query, (id,))
+            conn.commit()
+
+        self.memolist.setCurrentRow(0)
+        memo_index = 0
+        query = "SELECT memoId FROM memo LIMIT 1 OFFSET ?;"
+        results = cursor.execute(query, (memo_index,)).fetchone()
+        if results is None:
             self.getSummary()
-        except:
-            self.getSummary()
-            self.memopad.setPlainText("メモがないよ\nAddボタンでメモを追加してね")
+            self.memopad.setPlainText("メモがないよ\n追加ボタンでメモを追加してね")
+        else:
+            for result in results:
+                id = result
+                query = "SELECT content FROM memo WHERE memoId = ?;"
+                results = cursor.execute(query, (id,)).fetchall()
+                if results is None:
+                    pass
+                else:
+                    for result in results:
+                        self.memopad.setPlainText(str(result[0]))
+                        self.getSummary()
