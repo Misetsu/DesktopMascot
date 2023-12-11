@@ -271,7 +271,7 @@ class AlarmWindow(QWidget):
             self.line_push_button.setCheckable(True)
             if alarm_list[i] in on_alarm:
                 self.line_push_button.setChecked(True)
-                self.line_push_button.setText("On")
+                self.line_push_button.setText("オン")
             self.line_push_button.clicked.connect(self.clicked)
             self.delete_button = QPushButton("削除")
             self.delete_button.setObjectName("del " + str(i))
